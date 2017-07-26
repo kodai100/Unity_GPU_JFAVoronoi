@@ -1,0 +1,88 @@
+﻿#pragma kernel Init
+#pragma kernel JFA
+#pragma kernel RenderToTexture
+
+
+struct Data{
+	float2 pos;
+	float3 color;
+	float dist;
+};
+
+Texture2D<float4> _InputPoints;
+
+RWStructuredBuffer<Data> _DataWrite;
+StructuredBuffer<Data> _DataRead;
+
+
+RWTexture2D<float4> _Result;
+
+cbuffer cb{
+	int _N;
+	int _StepWidth;
+	bool _Colorize;
+};
+
+
+[numthreads(32,32,1)]
+void Init (uint3 id : SV_DispatchThreadID) {
+
+	_DataWrite[id.y * _N + id.x].color = _InputPoints[id.xy].xyz;
+
+	if(length(_InputPoints[id.xy].xyz) != 0){
+		_DataWrite[id.y * _N + id.x].pos = float2(id.x, id.y);
+		_DataWrite[id.y * _N + id.x].dist = 0;
+	} else{
+		_DataWrite[id.y * _N + id.x].pos = float2(0xffffff, 0xffffff);
+		_DataWrite[id.y * _N + id.x].dist = 0xffffff;
+	}
+}
+
+
+
+[numthreads(32,32,1)]
+void JFA (uint3 id : SV_DispatchThreadID) {
+	
+	Data myData = _DataRead[id.x + id.y * _N];
+
+	float bestDistance = _N * 0.5;
+
+	for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            int2 sampleCoord = id.xy + int2(x,y) * _StepWidth;
+
+			if(0 <= sampleCoord.x && sampleCoord.x < _N && 0 <= sampleCoord.y && sampleCoord.y < _N){
+				int nid = sampleCoord.x + sampleCoord.y * _N;
+
+				Data ndata = _DataRead[nid];
+			
+				float dist = length(id.xy - ndata.pos);
+
+				if(length(ndata.color) != 0 && dist < bestDistance){
+					bestDistance = dist;
+					myData.dist = dist;
+					myData.pos = ndata.pos;
+					myData.color = ndata.color;
+				}
+			}
+            
+        }
+    }
+
+	_DataWrite[id.x + id.y * _N] = myData;
+}
+
+
+
+
+
+[numthreads(32,32,1)]
+void RenderToTexture (uint3 id : SV_DispatchThreadID) {
+	if(_Colorize){
+		_Result[id.xy] = float4(_DataRead[id.y * _N + id.x].color * (1 - _DataRead[id.y * _N + id.x].dist/_N*2), 1);
+	} else{
+		float tmp = 1 - _DataRead[id.y * _N + id.x].dist/_N*2;
+		_Result[id.xy] = float4(float3(1,1,1) * tmp, 1);	// color
+	}
+	
+}

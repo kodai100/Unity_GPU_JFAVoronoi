@@ -1,0 +1,39 @@
+﻿#pragma kernel DistanceTransform
+
+Texture2D<float4> Source;
+RWTexture2D<float4> Result;
+
+cbuffer cb{
+	float _Width;
+	float _Height;
+};
+
+[numthreads(32,32,1)]
+void DistanceTransform (uint3 id : SV_DispatchThreadID) {
+
+
+
+	float minVal = 0xffffff;
+
+	if(Source[id.xy].x >= 1){
+		for(int y = 0; y < _Height; y++) {
+			for(int x = 0; x < _Width; x++) {
+
+				if(Source[uint2(x, y)].x <= 0){
+					float dist = (id.x-x)*(id.x-x) + (id.y-y)*(id.y-y);
+
+					if(dist < minVal) {
+						minVal = dist;
+					}
+				}
+				
+			}
+		}
+	} else{
+		minVal = 0;
+	}
+	
+
+	float res = sqrt(minVal)*0.008;
+	Result[id.xy] = float4(res, res, res, 1);
+}
