@@ -81,7 +81,7 @@ void RenderToTexture (uint3 id : SV_DispatchThreadID) {
 	if(_Colorize){
 		_Result[id.xy] = float4(_DataRead[id.y * _N + id.x].color * (1 - _DataRead[id.y * _N + id.x].dist/_N*2), 1);
 	} else{
-		float tmp = 1 - _DataRead[id.y * _N + id.x].dist/_N*2;
+		float tmp = 1 - _DataRead[id.y * _N + id.x].dist/_N*10;
 		_Result[id.xy] = float4(float3(1,1,1) * tmp, 1);	// color
 	}
 	

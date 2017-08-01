@@ -5,7 +5,10 @@ using UnityEngine;
 
 public class JumpFloodingVoronoi : MonoBehaviour {
 
-    public int N = 256;
+    public int _N = 256;
+    public int nx = 1920;
+    public int ny = 1080;
+
     [Range(1, 20)] public int stage = 1;
 
     public bool colorize;
@@ -41,15 +44,15 @@ public class JumpFloodingVoronoi : MonoBehaviour {
         CreateAndInitRenderTexture(ref render);
         
 
-        voronoiData = new ComputeBuffer(N * N, Marshal.SizeOf(typeof(Data)));
-        pingPong = new ComputeBuffer(N * N, Marshal.SizeOf(typeof(Data)));
+        voronoiData = new ComputeBuffer(nx * ny, Marshal.SizeOf(typeof(Data)));
+        pingPong = new ComputeBuffer(nx * ny, Marshal.SizeOf(typeof(Data)));
 
         dotPlotterMat = new Material(dotPlotterShader);
 
     }
 
     void CreateAndInitRenderTexture(ref RenderTexture tex) {
-        tex = new RenderTexture(N, N, 0, RenderTextureFormat.ARGB32);
+        tex = new RenderTexture(nx, ny, 0, RenderTextureFormat.ARGB32);
         tex.filterMode = FilterMode.Point;
         tex.enableRandomWrite = true;
         tex.Create();
@@ -73,7 +76,7 @@ public class JumpFloodingVoronoi : MonoBehaviour {
         
 
 
-        VoronoiCS.SetInt("_N", N);
+        VoronoiCS.SetInt("_N", _N);
         VoronoiCS.SetBool("_Colorize", colorize);
 
 
@@ -86,27 +89,27 @@ public class JumpFloodingVoronoi : MonoBehaviour {
             VoronoiCS.SetTexture(kernel, "_InputPoints", inputTexture);
         }
         VoronoiCS.SetBuffer(kernel, "_DataWrite", voronoiData);
-        VoronoiCS.Dispatch(kernel, N / 32, N / 32, 1);
+        VoronoiCS.Dispatch(kernel, _N / 32, _N / 32, 1);
 
         // カラー情報を保持したバッファ
         // 位置を保持したバッファ
         for (int i = 1; i < stage; i++) {
             
-            int stepWidth = (int)(N / Mathf.Pow(2, i));
+            int stepWidth = (int)(_N / Mathf.Pow(2, i));
             if (stepWidth == 0) break;
 
             kernel = VoronoiCS.FindKernel("JFA");
             VoronoiCS.SetInt("_StepWidth", stepWidth);
             VoronoiCS.SetBuffer(kernel, "_DataRead", voronoiData);
             VoronoiCS.SetBuffer(kernel, "_DataWrite", pingPong);
-            VoronoiCS.Dispatch(kernel, N / 32, N / 32, 1);
+            VoronoiCS.Dispatch(kernel, _N / 32, _N / 32, 1);
             SwapBuffer(ref voronoiData, ref pingPong);
         }
 
         kernel = VoronoiCS.FindKernel("RenderToTexture");
         VoronoiCS.SetTexture(kernel, "_Result", render);
         VoronoiCS.SetBuffer(kernel, "_DataRead", voronoiData);
-        VoronoiCS.Dispatch(kernel, N / 32, N / 32, 1);
+        VoronoiCS.Dispatch(kernel, _N / 32, _N / 32, 1);
     }
 
     private void OnDestroy() {
