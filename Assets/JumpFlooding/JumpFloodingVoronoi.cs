@@ -5,49 +5,33 @@ using UnityEngine;
 
 public class JumpFloodingVoronoi : MonoBehaviour {
 
-    public int _N = 256;
     public int nx = 1920;
     public int ny = 1080;
 
     [Range(1, 20)] public int stage = 1;
-
-    public bool colorize;
-    public Gradient gradient;
-
-    public bool useCamera;
+    
     public RenderTexture cameraTex;
-
-    public Shader dotPlotterShader;
-    Material dotPlotterMat;
 
     struct Data {
         public Vector2 pos;
         public Vector3 color;
         public float dist;
     };
-
-    RenderTexture inputTexture;
-    RenderTexture tmpTexture;
+    
     RenderTexture render;
 
     public ComputeShader VoronoiCS;
     ComputeBuffer voronoiData;
     ComputeBuffer pingPong;
 
-	void Start () {
+    public Material resultMat;
 
-        if (!useCamera) {
-            CreateAndInitRenderTexture(ref inputTexture);
-            CreateAndInitRenderTexture(ref tmpTexture);
-        }
-        
+	void Start () {
         CreateAndInitRenderTexture(ref render);
         
 
         voronoiData = new ComputeBuffer(nx * ny, Marshal.SizeOf(typeof(Data)));
         pingPong = new ComputeBuffer(nx * ny, Marshal.SizeOf(typeof(Data)));
-
-        dotPlotterMat = new Material(dotPlotterShader);
 
     }
 
@@ -65,68 +49,45 @@ public class JumpFloodingVoronoi : MonoBehaviour {
 
 	void Update () {
 
-        if (!useCamera) {
-            if (Input.GetMouseButtonUp(0)) {
-                dotPlotterMat.SetVector("_Mouse", Input.mousePosition);
-                dotPlotterMat.SetColor("_RandColor", gradient.Evaluate(Random.value));
-                Graphics.Blit(inputTexture, tmpTexture, dotPlotterMat, 0);
-                SwapBuffer(ref inputTexture, ref tmpTexture);
-            }
-        }
-        
 
+        VoronoiCS.SetInt("_NX", nx);
+        VoronoiCS.SetInt("_NY", ny);    // TODO compute
 
-        VoronoiCS.SetInt("_N", _N);
-        VoronoiCS.SetBool("_Colorize", colorize);
-
-
-        // inputTextureが結果を保持している
         int kernel = VoronoiCS.FindKernel("Init");
-       
-        if (useCamera) {
-            VoronoiCS.SetTexture(kernel, "_InputPoints", cameraTex);
-        } else {
-            VoronoiCS.SetTexture(kernel, "_InputPoints", inputTexture);
-        }
+        VoronoiCS.SetTexture(kernel, "_InputPoints", cameraTex);
         VoronoiCS.SetBuffer(kernel, "_DataWrite", voronoiData);
-        VoronoiCS.Dispatch(kernel, _N / 32, _N / 32, 1);
+        VoronoiCS.Dispatch(kernel, nx / 32, ny / 32, 1);
 
         // カラー情報を保持したバッファ
         // 位置を保持したバッファ
         for (int i = 1; i < stage; i++) {
             
-            int stepWidth = (int)(_N / Mathf.Pow(2, i));
+            int stepWidth = (int)(Mathf.Max(nx, ny) / Mathf.Pow(2, i));
             if (stepWidth == 0) break;
 
             kernel = VoronoiCS.FindKernel("JFA");
             VoronoiCS.SetInt("_StepWidth", stepWidth);
             VoronoiCS.SetBuffer(kernel, "_DataRead", voronoiData);
             VoronoiCS.SetBuffer(kernel, "_DataWrite", pingPong);
-            VoronoiCS.Dispatch(kernel, _N / 32, _N / 32, 1);
+            VoronoiCS.Dispatch(kernel, nx / 32, ny / 32, 1);
             SwapBuffer(ref voronoiData, ref pingPong);
         }
 
         kernel = VoronoiCS.FindKernel("RenderToTexture");
         VoronoiCS.SetTexture(kernel, "_Result", render);
         VoronoiCS.SetBuffer(kernel, "_DataRead", voronoiData);
-        VoronoiCS.Dispatch(kernel, _N / 32, _N / 32, 1);
+        VoronoiCS.Dispatch(kernel, nx / 32, ny / 32, 1);
+
+        resultMat.SetTexture("_MainTex", render);
     }
 
     private void OnDestroy() {
-        inputTexture.Release();
-        tmpTexture.Release();
         voronoiData.Release();
+        render.Release();
+        pingPong.Release();
     }
 
     private void OnGUI() {
-
-        if (useCamera) {
-            GUI.DrawTexture(new Rect(0, 0, 256, 256), cameraTex);
-        } else {
-            GUI.DrawTexture(new Rect(0, 0, 256, 256), inputTexture);
-        }
-
-        GUI.DrawTexture(new Rect(256, 0, 256, 256), render);
     }
 
     void SwapBuffer<T>(ref T ping, ref T pong) where T : class {
